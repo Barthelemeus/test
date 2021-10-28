@@ -114,7 +114,7 @@ Produce the confusion matrix for the model logistic 3 for a cutoff of `16%` (adj
 #using the logistic 2 model predict boolean_result probabilities
 prob<-predict(logistic3,os,type="response") #this is a vector of probabilities of boolean_result
 
-one_or_zero<-ifelse(prob>0.16,"1","0") #If the the probability is great than the threshold of 0.25 then output 1 otherwise 0
+one_or_zero<-ifelse(prob>0.14,"1","0") #If the the probability is great than the threshold of 0.25 then output 1 otherwise 0
   
 #Call any loan with probability more than 16% as boolean_result and any loan with lower probability as non-boolean_result. Make sure your prediction is a factor with the same levels as the boolean_result variable in the lc_clean data frame
 p_class<-factor(one_or_zero,levels=levels(os$boolean_result)) #this is a vector of predictions of boolean_result (1) vs non boolean_result (0)
@@ -136,6 +136,6 @@ os_result <- os %>%
 ```
 
 ```{r}
-write.csv(os_result, "C:\\Users\\ellen\\Documents\\bartLogisticReg\\os_result1.csv", row.names = FALSE)
+write.csv(os_result, "C:\\Users\\bartd\\OneDrive\\Desktop\\test\\os_result1.csv", row.names = FALSE)
 ```
 
