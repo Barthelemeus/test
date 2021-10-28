@@ -1,0 +1,128 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, load_libraries, include = FALSE}
+library(tidyverse) # the usual stuff: dplyr, readr, and other goodies
+library(lubridate) # to handle dates
+library(GGally) # for correlation-scatter plot matrix
+library(ggfortify) # to produce residual diagnostic plots
+library(rsample) # to split dataframe in training- & testing sets
+library(janitor) # clean_names()
+library(broom) # use broom:augment() to get tidy table with regression output, residuals, etc
+library(huxtable) # to get summary table of all models produced
+library(caret) # to train more advanced models (k-fold cross-validation, stepwise regression, LASSO)
+library(nnet) # to calculate the maximum value of a vector
+library(pROC) # to plot ROC curves
+library(MLmetrics) #for caret LASSO logistic regression
+library(sampling) # to split dataframe in training- & testing sets
+```
+
+# Introduction
+
+The goal of this markdown document is to use logistic regression for classification.
+
+## Load the data
+
+First we need to start by loading the data.
+```{r, load_data, warning=FALSE, message=FALSE}
+
+os <- read_csv("OrderStatistics.csv") %>%  #since the first row is a title we want to skip it. 
+  clean_names() # use janitor::clean_names()
+
+os$boolean_result = as.factor(os$boolean_result)
+```
+
+Find out the column types.
+```{r, load_data, warning=FALSE, message=FALSE}
+
+glimpse(os)
+```
+
+#feature selection
+base logistic regression model
+```{r, Simple Logistic Regression, warning=FALSE}
+logistic1<-glm(boolean_result~weight+express_cost+length+city_weight+city_express_cost+city_length+traffic_weight+traffic_express_cost+traffic_length+city_number_orders+city_traffic_number_orders+total_number_orders+total_number_cities, family="binomial", os)
+summary(logistic1)
+```
+
+remove the insignificant features and build the second logistic regression model
+```{r, second logistic regression}
+logistic2<-glm(boolean_result~weight+express_cost+length+traffic_express_cost+city_traffic_number_orders, family="binomial", os)
+summary(logistic2)
+```
+
+## logistic regression model 3 is out-of-sample train test
+
+```{r, out-of-sample ROC curve}
+# splitting the data into training and testing
+set.seed(1234)
+train_test_split <- initial_split(os, prop = 0.7)
+testing <- testing(train_test_split) #20% of the data is set aside for testing
+training <- training(train_test_split) #80% of the data is set aside for training
+
+# run logistic 3 on the training set 
+logistic3<-glm(boolean_result~weight+express_cost+length+traffic_express_cost+city_traffic_number_orders, family="binomial", training)
+
+# estimates
+summary(logistic2)
+```
+
+
+```{r, out-of-sample ROC curve}
+#calculate probability of boolean_result in the training sample 
+p_in<-predict(logistic3, training, type = "response") #predict probability of boolean_result on the training set
+  
+#ROC curve using in-sample predictions
+ROC_logistic3_in <- roc(training$boolean_result,p_in)
+ROC_logistic3_in
+#AUC using in-sample predictions
+AUC_logistic3_in<- round(auc(training$boolean_result,p_in)*100, digits=2)
+AUC_logistic3_in
+```
+```{r, out-of-sample ROC curve}
+#calculate probability of default out of sample 
+p_out<- predict(logistic3, testing, type = "response") #predict probability of boolean_result on the training set
+
+
+#ROC curve using out-of-sample predictions
+ROC_logistic3_out <- roc(testing$boolean_result ,p_out)
+ROC_logistic3_out
+#AUC using out-of-sample predictions
+AUC_logistic3_out <- round(auc(testing$boolean_result ,p_out)*100, digits=2)
+AUC_logistic3_out
+```
+
+```{r, plot ROC curve}
+#Plot the ROC curve and display the AUC in the title
+ROC2<-ggroc(ROC_logistic3_out,  alpha = 0.5)+ ggtitle(paste("Model Logistic 3: AUC=",round(auc(testing$boolean_result,p_out)*100, digits=2),"%"))  +
+geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed")+geom_segment(aes(x = 1, xend = 1, y = 0, yend = 1), color="black", linetype="dashed")+geom_segment(aes(x = 1, xend = 0, y = 1, yend = 1), color="black", linetype="dashed")
+
+ROC2
+
+```
+
+Produce the confusion matrix for the model logistic 3 for a cutoff of `16%` (adjust this to achieve desirable confusion matrix)
+
+```{r, From probability to classification}
+#using the logistic 2 model predict boolean_result probabilities
+prob<-predict(logistic3,os,type="response") #this is a vector of probabilities of boolean_result
+
+one_or_zero<-ifelse(prob>0.16,"1","0") #If the the probability is great than the threshold of 0.25 then output 1 otherwise 0
+  
+#Call any loan with probability more than 16% as boolean_result and any loan with lower probability as non-boolean_result. Make sure your prediction is a factor with the same levels as the boolean_result variable in the lc_clean data frame
+p_class<-factor(one_or_zero,levels=levels(os$boolean_result)) #this is a vector of predictions of boolean_result (1) vs non boolean_result (0)
+  
+#produce the confusion matrix and set boolean_result as the positive outcome
+con2<-confusionMatrix(p_class,os$boolean_result,positive="1") #the first input is the class prediction, the second input is the actual outcomes. We also define the positive outcome to be "1" (i.e., boolean_result is the outcome we consider "positive"). The output is a confusion matrix.
+
+#print the confusion matrix
+con2
+
+
+```
